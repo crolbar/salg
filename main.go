@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -16,6 +17,14 @@ type model struct {
 
 var nums = []int{42, 7, 68, 35, 16, 54, 27, 3, 49, 21, 62, 10, 39, 58, 5, 31, 67, 12, 45, 26, 70, 18, 34, 55, 1, 48, 29, 14, 53, 23, 66, 9, 37, 61, 6, 47, 20, 33, 56, 2, 50, 25, 11, 44, 30, 69, 19, 36, 59, 8, 41, 17, 64, 4, 51, 28, 13, 46, 24, 65, 15, 40, 57, 22, 60, 32, 63, 38, 52, 43}
 
+var sorts []func([]int) = []func([]int){
+	MergeSort,
+	QuickSort,
+	SelectionSort,
+	BubbleSort,
+	InsertionSort,
+}
+
 var p *tea.Program
 
 func (m model) Init() tea.Cmd {
@@ -26,15 +35,11 @@ type Refresh struct{}
 type Next struct{}
 
 func triggerNext() {
-	go func() {
-		p.Send(Next{})
-	}()
+	p.Send(Next{})
 }
 
 func triggerRefresh() {
-	go func() {
-		p.Send(Refresh{})
-	}()
+	p.Send(Refresh{})
 	time.Sleep(50 * time.Millisecond)
 }
 
@@ -45,123 +50,74 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q":
 			return m, tea.Quit
 		case "m":
-			go func() {
-				MergeSort(m.levels)
-			}()
+			go MergeSort(m.levels)
 		case "u":
-			go func() {
-				QuickSort(m.levels)
-			}()
+			go QuickSort(m.levels)
 		case "b":
-			go func() {
-				BubbleSort(m.levels)
-			}()
+			go BubbleSort(m.levels)
 		case "s":
-			go func() {
-				SelectionSort(m.levels)
-			}()
+			go SelectionSort(m.levels)
+		case "i":
+			go InsertionSort(m.levels)
 		case "r":
 			m.reset()
 		case "a":
-			triggerNext()
+			go triggerNext()
 		}
 	case Next:
 		m.reset()
 
-		switch m.autoIdx {
-		case 4:
-			m.autoIdx = 0
-			fallthrough
-		case 0:
-			go func() {
-				MergeSort(m.levels)
-				triggerNext()
-			}()
-		case 1:
-			go func() {
-				QuickSort(m.levels)
-				triggerNext()
-			}()
-		case 2:
-			go func() {
-				SelectionSort(m.levels)
-				triggerNext()
-			}()
-		case 3:
-			go func() {
-				BubbleSort(m.levels)
-				triggerNext()
-			}()
+		m.autoIdx++
 
+		if m.autoIdx == 5 {
+			m.autoIdx = 0
 		}
 
-		m.autoIdx++
+		go func() {
+			(sorts[m.autoIdx])(m.levels)
+			triggerNext()
+		}()
 	}
 	return m, nil
 }
 
 func (m *model) reset() {
-	copy(m.levels, []int{42, 7, 68, 35, 16, 54, 27, 3, 49, 21, 62, 10, 39, 58, 5, 31, 67, 12, 45, 26, 70, 18, 34, 55, 1, 48, 29, 14, 53, 23, 66, 9, 37, 61, 6, 47, 20, 33, 56, 2, 50, 25, 11, 44, 30, 69, 19, 36, 59, 8, 41, 17, 64, 4, 51, 28, 13, 46, 24, 65, 15, 40, 57, 22, 60, 32, 63, 38, 52, 43})
+	m.levels = make([]int, len(nums))
+	copy(m.levels, nums)
 }
+
+var s lipgloss.Style = lipgloss.NewStyle()
 
 func (m model) View() string {
 	out := ""
 	sec := int(time.Now().Unix())
 
-	var (
-		i_start int
-		i_end   func(j int) bool
-		i_inc   int
-	)
+	for i := 0; i < len(m.levels); i++ {
+		var line strings.Builder
 
-	// if (sec & (sec % 1)) > 0 {
-	i_start = 0
-	i_end = func(j int) bool { return j < len(m.levels) }
-	i_inc = 1
-	// } else {
-	// 	i_start = len(m.levels) - 1
-	// 	i_end = func(j int) bool { return j >= 0 }
-	// 	i_inc = -1
-	// }
-
-	for i := i_start; i_end(i); i += i_inc {
-
-		line := ""
-
-		var (
-			j_start int
-			j_end   func(j int) bool
-			j_inc   int
-		)
-
-		// if (sec & 1) > 0 {
-		// j_start = 1
-		// j_end = func(j int) bool { return j <= 70 }
-		// j_inc = 1
-		// } else {
-		j_start = 70
-		j_end = func(j int) bool { return j >= 1 }
-		j_inc = -1
-		// }
-
-		for j := j_start; j_end(j); j += j_inc {
+		for j := 70; j >= 1; j-- {
 			if m.levels[i] >= j {
-				line += "█\n"
+				line.WriteString("█\n")
 			} else {
-				line += " \n"
+				line.WriteString(" \n")
 			}
 		}
 
-		s := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(fmt.Sprintf("%d", (i+sec)%255)))
-		out = lipgloss.JoinHorizontal(lipgloss.Left, out, s.Render(line))
+		out = lipgloss.JoinHorizontal(lipgloss.Left, out,
+			s.Foreground(
+				lipgloss.Color(
+					fmt.Sprintf("%d", (i+sec)%255))).
+				Render(line.String()),
+		)
 	}
 
 	return out
 }
 
 func main() {
-	p = tea.NewProgram(model{levels: nums, autoIdx: 0}, tea.WithAltScreen())
+	levels := make([]int, len(nums))
+	copy(levels, nums)
+	p = tea.NewProgram(model{levels: levels, autoIdx: 0}, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting app: %v", err)
 		os.Exit(1)
